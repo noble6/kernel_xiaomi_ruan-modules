@@ -15,6 +15,8 @@
 #include "sde_connector.h"
 #include "msm_mmu.h"
 #include "dsi_display.h"
+#include "../ruan/ruan_backlight_sy7758.h"
+#include "../ruan/ruan_bias_ocp2131.h"
 #include "dsi_panel.h"
 #include "dsi_ctrl.h"
 #include "dsi_ctrl_hw.h"
@@ -9107,6 +9109,10 @@ void __init dsi_display_register(void)
 	dsi_ctrl_drv_register();
 
 	dsi_display_parse_boot_display_selection();
+
+	/* ruan: LCD bias and backlight chips, before the panel probes */
+	ruan_bias_ocp2131_init();
+	mi_backlight_sy7758_init();
 
 	platform_driver_register(&dsi_display_driver);
 }

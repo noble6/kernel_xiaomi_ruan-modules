@@ -13,6 +13,8 @@
 #include <video/mipi_display.h>
 
 #include "dsi_panel.h"
+#include "../ruan/ruan_backlight_sy7758.h"
+#include "../ruan/ruan_bias_ocp2131.h"
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 #include "sde_dbg.h"
@@ -356,6 +358,9 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
 
+	/* ruan: LCD bias comes up before the panel rails, as on stock */
+	ruan_bias_enable();
+
 	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
 	if (rc) {
 		DSI_ERR("[%s] failed to enable vregs, rc=%d\n",
@@ -648,6 +653,11 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		rc = dsi_panel_update_backlight(panel, bl_lvl);
 		break;
 	case DSI_BACKLIGHT_EXTERNAL:
+		/* ruan: SY7758 (or SGM37604A) LED drivers over I2C */
+		if (sy7758_present()) {
+			sy7758_set_panel_name(panel->name);
+			rc = sy7758_backlight_update_status(bl_lvl);
+		}
 		break;
 	case DSI_BACKLIGHT_PWM:
 		rc = dsi_panel_update_pwm_backlight(panel, bl_lvl);
@@ -4828,6 +4838,12 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		goto error;
 	}
 
+	/* ruan: the backlight chips reset with the panel rails */
+	if (sy7758_present()) {
+		sy7758_set_panel_name(panel->name);
+		sy7758_panel_power(true);
+	}
+
 	if (panel->panel_mode == DSI_OP_CMD_MODE) {
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_CMD_ON);
 		if (rc) {
@@ -4974,12 +4990,18 @@ int dsi_panel_post_unprepare(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
+	if (sy7758_present())
+		sy7758_panel_power(false);
+
 	rc = dsi_panel_power_off(panel);
 	if (rc) {
 		DSI_ERR("[%s] panel power_Off failed, rc=%d\n",
 		       panel->name, rc);
 		goto error;
 	}
+
+	/* ruan: LCD bias goes down after the panel rails, as on stock */
+	ruan_bias_disable();
 error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
