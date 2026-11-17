@@ -110,3 +110,7 @@ ifneq ($(CONFIG_DISABLE_TEST_MODULES), y)
     obj-m += seccam_test_driver.o
     seccam_test_driver-objs := securemsm_tests/seccam_test_driver/seccam_test_driver.o
 endif
+
+# Find the smcinvoke trace header from this tree instead of a fixed
+# sm8450-modules path next to the kernel.
+ccflags-y += -DSMCINVOKE_TRACE_INCLUDE_PATH=$(SSG_MODULE_ROOT)/smcinvoke/compat
