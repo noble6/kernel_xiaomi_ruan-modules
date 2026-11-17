@@ -28,6 +28,12 @@ CONFIG_MSM_GLOBAL_SYNX := y
 endif
 endif
 
+# Parrot (ruan) uses synx v1, as CONFIG_MSM_GLOBAL_SYNX=m on 5.10
+ifeq ($(CONFIG_ARCH_PARROT), y)
+KBUILD_CPPFLAGS += -DCONFIG_MSM_GLOBAL_SYNX
+CONFIG_MSM_GLOBAL_SYNX := y
+endif
+
 ifeq ($(CONFIG_MSM_GLOBAL_SYNX_V2), y)
 obj-m += synx/ipclite.o
 obj-m += synx-driver.o
