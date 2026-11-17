@@ -46,6 +46,9 @@
 #include "msm-audio-defs.h"
 #include "msm_common.h"
 #include "msm_dailink.h"
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+#include "codecs/sipa/sipa_aux_dev_if.h"
+#endif
 
 #define DRV_NAME "waipio-asoc-snd"
 #define __CHIPSET__ "WAIPIO "
@@ -2311,6 +2314,16 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	/* parse upd configuration */
 	msm_parse_upd_configuration(pdev, pdata);
 
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+	/* Xiaomi ruan: SIA81xx speaker amplifiers as aux devices */
+	if (of_find_property(pdev->dev.of_node, "si,sia81xx-aux-devs", NULL)) {
+		ret = soc_aux_init_only_sia81xx(pdev, card);
+		if (ret)
+			dev_err(&pdev->dev, "%s: sia81xx aux init failed %d\n",
+				__func__, ret);
+	}
+#endif
+
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
 		if (codec_reg_done)
@@ -2400,6 +2413,10 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 
 	msm_common_snd_deinit(common_pdata);
 	snd_event_master_deregister(&pdev->dev);
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+	if (card && of_find_property(pdev->dev.of_node, "si,sia81xx-aux-devs", NULL))
+		soc_aux_deinit_only_sia81xx(pdev, card);
+#endif
 	snd_soc_unregister_card(card);
 
 	return 0;

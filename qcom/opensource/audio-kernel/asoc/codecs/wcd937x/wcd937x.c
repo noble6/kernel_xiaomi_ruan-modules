@@ -2323,9 +2323,110 @@ static SOC_ENUM_SINGLE_EXT_DECL(wcd937x_ear_pa_gain_enum,
 static SOC_ENUM_SINGLE_EXT_DECL(wcd937x_tx_ch_pwr_level_enum,
 				wcd937x_tx_ch_pwr_level_text);
 
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+/*
+ * Xiaomi ruan: SIA81xx speaker amplifiers on the AUX and EAR outputs.
+ * Rebuilt from the stock OS3.0 wcd937x_dlkm. "wcd937x_sia81xx_index"
+ * picks the amplifiers: 0-3 is one amplifier (1 << index), anything else
+ * is the pair on that output (AUX: 0x1|0x2, EAR: 0x4|0x8). They are
+ * powered after the output PGA comes up and before it goes down.
+ */
+extern int wcd937x_sia81xx_resume(uint8_t pa_idx);
+extern int wcd937x_sia81xx_suspend(uint8_t pa_idx);
+
+static int g_wcd937x_sia81xx_index = 4;
+
+static int wcd937x_sia81xx_index_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = g_wcd937x_sia81xx_index;
+	return 0;
+}
+
+static int wcd937x_sia81xx_index_set(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	g_wcd937x_sia81xx_index = ucontrol->value.integer.value[0];
+	return 0;
+}
+
+static void wcd937x_sia81xx_switch(int event, uint8_t lo, uint8_t hi)
+{
+	unsigned int idx = g_wcd937x_sia81xx_index;
+	int (*fn)(uint8_t pa_idx);
+
+	if (event == SND_SOC_DAPM_POST_PMU)
+		fn = wcd937x_sia81xx_resume;
+	else if (event == SND_SOC_DAPM_PRE_PMD)
+		fn = wcd937x_sia81xx_suspend;
+	else
+		return;
+
+	if (idx <= 3) {
+		fn(1 << idx);
+	} else {
+		fn(lo);
+		fn(hi);
+	}
+}
+
+static int sia81xx_dev_0_pa_event(struct snd_soc_dapm_widget *w,
+				  struct snd_kcontrol *kcontrol, int event)
+{
+	wcd937x_sia81xx_switch(event, 0x1, 0x2);
+	return 0;
+}
+
+static int sia81xx_dev_1_pa_event(struct snd_soc_dapm_widget *w,
+				  struct snd_kcontrol *kcontrol, int event)
+{
+	wcd937x_sia81xx_switch(event, 0x4, 0x8);
+	return 0;
+}
+
+static const char * const wcd937x_aux_path_mode_text[] = {
+	"HP_MODE", "NORMAL_MODE",
+};
+
+static SOC_ENUM_SINGLE_EXT_DECL(wcd937x_aux_path_mode_enum,
+				wcd937x_aux_path_mode_text);
+
+static int wcd937x_aux_path_mode_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+				snd_soc_kcontrol_component(kcontrol);
+
+	ucontrol->value.enumerated.item[0] =
+		(snd_soc_component_read(component,
+				WCD937X_DIGITAL_CDC_PATH_MODE) >> 6) & 0x1;
+	return 0;
+}
+
+static int wcd937x_aux_path_mode_put(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+				snd_soc_kcontrol_component(kcontrol);
+	bool normal = !!ucontrol->value.enumerated.item[0];
+
+	snd_soc_component_update_bits(component, WCD937X_DIGITAL_CDC_PATH_MODE,
+				      0x40, normal << 6);
+	snd_soc_component_update_bits(component, WCD937X_AUX_AUXPA,
+				      0x10, normal << 4);
+	return 0;
+}
+#endif
+
 static const struct snd_kcontrol_new wcd937x_snd_controls[] = {
 	SOC_ENUM_EXT("EAR PA GAIN", wcd937x_ear_pa_gain_enum,
 		wcd937x_ear_pa_gain_get, wcd937x_ear_pa_gain_put),
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+	SOC_SINGLE_EXT("wcd937x_sia81xx_index", SND_SOC_NOPM, 0, 16, 0,
+		wcd937x_sia81xx_index_get, wcd937x_sia81xx_index_set),
+	SOC_ENUM_EXT("AUX PATH Mode", wcd937x_aux_path_mode_enum,
+		wcd937x_aux_path_mode_get, wcd937x_aux_path_mode_put),
+#endif
 	SOC_ENUM_EXT("RX HPH Mode", rx_hph_mode_mux_enum,
 		wcd937x_rx_hph_mode_get, wcd937x_rx_hph_mode_put),
 	SOC_SINGLE_EXT("HPHL_COMP Switch", SND_SOC_NOPM, 0, 1, 0,
@@ -2578,6 +2679,14 @@ static const struct snd_soc_dapm_widget wcd937x_dapm_widgets[] = {
 	SND_SOC_DAPM_OUTPUT("WCD_TX_OUTPUT"),
 
 	/*output widgets rx*/
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+	SND_SOC_DAPM_OUT_DRV_E("SIA81XX_DEV_0", SND_SOC_NOPM, 0, 0, NULL, 0,
+			       sia81xx_dev_0_pa_event,
+			       SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
+	SND_SOC_DAPM_OUT_DRV_E("SIA81XX_DEV_1", SND_SOC_NOPM, 0, 0, NULL, 0,
+			       sia81xx_dev_1_pa_event,
+			       SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
+#endif
 	SND_SOC_DAPM_OUTPUT("EAR"),
 	SND_SOC_DAPM_OUTPUT("AUX"),
 	SND_SOC_DAPM_OUTPUT("HPHL"),
@@ -2711,14 +2820,24 @@ static const struct snd_soc_dapm_route wcd937x_audio_map[] = {
 	{"RDAC4", NULL, "RX3"},
 	{"AUX_RDAC", "Switch", "RDAC4"},
 	{"AUX PGA", NULL, "AUX_RDAC"},
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+	{"SIA81XX_DEV_0", NULL, "AUX PGA"},
+	{"AUX", NULL, "SIA81XX_DEV_0"},
+#else
 	{"AUX", NULL, "AUX PGA"},
+#endif
 
 	{"RDAC3_MUX", "RX3", "RX3"},
 	{"RDAC3_MUX", "RX1", "RX1"},
 	{"RDAC3", NULL, "RDAC3_MUX"},
 	{"EAR_RDAC", "Switch", "RDAC3"},
 	{"EAR PGA", NULL, "EAR_RDAC"},
+#if IS_ENABLED(CONFIG_SND_SOC_SIA81XX)
+	{"SIA81XX_DEV_1", NULL, "EAR PGA"},
+	{"EAR", NULL, "SIA81XX_DEV_1"},
+#else
 	{"EAR", NULL, "EAR PGA"},
+#endif
 };
 
 static const struct snd_soc_dapm_route wcd9375_audio_map[] = {
