@@ -32,9 +32,12 @@ KBUILD_EXTRA := \
     MODNAME=$(WLAN_CHIPSET)_$(LOCAL_DEV_NAME) \
     DEVNAME=$(LOCAL_DEV_NAME)
 
+# M is .<chip>, a symlink to this directory, so resolve it before going up:
+# $(M)/../.. would otherwise land one level too high.
+QCACLD_DIR := $(shell cd $(KERNEL_SRC); readlink -e $(M))
 KBUILD_OPTIONS += \
-    KBUILD_EXTRA_SYMBOLS=$(M)/../../../dataipa/drivers/platform/msm/Module.symvers \
-    KBUILD_EXTRA_SYMBOLS+=$(M)/../../platform/Module.symvers
+    KBUILD_EXTRA_SYMBOLS=$(QCACLD_DIR)/../../dataipa/drivers/platform/msm/Module.symvers \
+    KBUILD_EXTRA_SYMBOLS+=$(QCACLD_DIR)/../platform/Module.symvers
 
 #By default build for CLD
 WLAN_SELECT := CONFIG_QCA_CLD_WLAN=m
