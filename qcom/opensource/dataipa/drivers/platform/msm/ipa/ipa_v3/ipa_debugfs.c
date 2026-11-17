@@ -4302,4 +4302,5 @@ int _ipa_read_ep_reg_v4_0(char *buf, int max_len, int pipe)
 }
 void ipa3_eth_debugfs_init(void) {}
 void ipa3_eth_debugfs_add(struct ipa_eth_client *client) {}
+void ipa3_eth_debugfs_add_node(struct ipa_eth_client *client) {}
 #endif
